@@ -22,14 +22,6 @@ const oauthProviders = {
             consumerSecret: env.GOOGLE_CONSUMER_SECRET,
         },
     },
-    twitter: {
-        Strategy: require('passport-twitter').Strategy,
-        requiredEnv: ['TWITTER_CONSUMER_KEY', 'TWITTER_CONSUMER_SECRET'],
-        options: {
-            consumerKey: env.TWITTER_CONSUMER_KEY,
-            consumerSecret: env.TWITTER_CONSUMER_SECRET,
-        },
-    },
     /* TODO
     apple: {
         Strategy: require('passport-appleid'),

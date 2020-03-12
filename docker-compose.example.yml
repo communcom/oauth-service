@@ -1,0 +1,17 @@
+version: '2.1'
+services:
+    oauth-service:
+        container_name: oauth-service
+        restart: always
+        build:
+            context: .
+            dockerfile: Dockerfile
+        networks:
+            - services-tier
+        ports:
+            - $GLS_CONNECTOR_HOST:$GLS_CONNECTOR_PORT:$GLS_CONNECTOR_PORT
+        env_file:
+            - .env
+
+networks:
+    services-tier:

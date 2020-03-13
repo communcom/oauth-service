@@ -55,7 +55,7 @@ function validateEnv(envArray) {
 
 const buildRoutes = provider => ({
     route: `${env.AUTH_ROUTE_PREFIX}/${provider}`,
-    callback: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
+    callback: `${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
 });
 
 async function strategyCallback(accessToken, refreshToken, profile, done) {
@@ -109,7 +109,12 @@ const oauth = app => {
 
         const { route, callback } = buildRoutes(provider);
 
-        passport.use(new Strategy({ ...options, callbackURL: callback }, strategyCallback));
+        passport.use(
+            new Strategy(
+                { ...options, callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}` },
+                strategyCallback
+            )
+        );
 
         app.get(route, passport.authenticate(provider, { scope }));
 

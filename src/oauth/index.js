@@ -125,11 +125,11 @@ const oauth = app => {
                 const { user } = req;
 
                 if (user.code && user.currentState) {
-                    res.cookie('commun_oauth_error', user.currentState);
+                    res.cookie('commun_oauth_state', user.currentState);
                 }
 
                 if (user.code && user.code === 1101) {
-                    res.cookie('commun_oauth_error', 'registered');
+                    res.cookie('commun_oauth_state', 'registered');
                 }
 
                 if (user.success) {

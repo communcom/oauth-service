@@ -13,14 +13,16 @@ const oauthProviders = {
             clientID: env.FACEBOOK_APP_ID,
             clientSecret: env.FACEBOOK_APP_SECRET,
         },
+        scope: undefined,
     },
     google: {
         Strategy: require('passport-google-oauth').OAuth2Strategy,
         requiredEnv: ['GOOGLE_CONSUMER_KEY', 'GOOGLE_CONSUMER_SECRET'],
         options: {
-            consumerKey: env.GOOGLE_CONSUMER_KEY,
-            consumerSecret: env.GOOGLE_CONSUMER_SECRET,
+            clientID: env.GOOGLE_CONSUMER_KEY,
+            clientSecret: env.GOOGLE_CONSUMER_SECRET,
         },
+        scope: ['profile'],
     },
     /* TODO
     apple: {
@@ -53,7 +55,7 @@ function validateEnv(envArray) {
 
 const buildRoutes = provider => ({
     route: `${env.AUTH_ROUTE_PREFIX}/${provider}`,
-    callback: `${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
+    callback: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
 });
 
 async function strategyCallback(accessToken, refreshToken, profile, done) {
@@ -98,7 +100,7 @@ const oauth = app => {
 
         console.log(`Setting up provider: ${provider}`);
 
-        const { Strategy, requiredEnv, options } = currentProvider;
+        const { Strategy, requiredEnv, options, scope } = currentProvider;
 
         if (!validateEnv(requiredEnv)) {
             console.log(`ERROR - ${provider} is not initialized`);
@@ -109,7 +111,7 @@ const oauth = app => {
 
         passport.use(new Strategy({ ...options, callbackURL: callback }, strategyCallback));
 
-        app.get(route, passport.authenticate(provider));
+        app.get(route, passport.authenticate(provider, { scope }));
 
         app.get(
             callback,

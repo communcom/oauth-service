@@ -14,6 +14,7 @@ const oauthProviders = {
             clientSecret: env.FACEBOOK_APP_SECRET,
         },
         scope: undefined,
+        type: 'oauth',
     },
     google: {
         Strategy: require('passport-google-oauth').OAuth2Strategy,
@@ -23,6 +24,28 @@ const oauthProviders = {
             clientSecret: env.GOOGLE_CONSUMER_SECRET,
         },
         scope: ['profile'],
+        type: 'oauth',
+    },
+    'google-token': {
+        Strategy: require('passport-token-google2').Strategy,
+        strategyName: 'google-token',
+        requiredEnv: ['GOOGLE_CONSUMER_KEY', 'GOOGLE_CONSUMER_SECRET'],
+        options: {
+            clientID: env.GOOGLE_CONSUMER_KEY,
+            clientSecret: env.GOOGLE_CONSUMER_SECRET,
+        },
+        scope: ['profile'],
+        type: 'token',
+    },
+    'facebook-token': {
+        Strategy: require('passport-facebook-token'),
+        requiredEnv: ['FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET'],
+        options: {
+            clientID: env.FACEBOOK_APP_ID,
+            clientSecret: env.FACEBOOK_APP_SECRET,
+        },
+        scope: ['profile'],
+        type: 'token',
     },
     /* TODO
     apple: {
@@ -100,7 +123,7 @@ const oauth = app => {
 
         console.log(`Setting up provider: ${provider}`);
 
-        const { Strategy, requiredEnv, options, scope } = currentProvider;
+        const { Strategy, requiredEnv, options, scope, type } = currentProvider;
 
         if (!validateEnv(requiredEnv)) {
             console.log(`ERROR - ${provider} is not initialized`);
@@ -109,37 +132,65 @@ const oauth = app => {
 
         const { route, callback } = buildRoutes(provider);
 
-        passport.use(
-            new Strategy(
-                { ...options, callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}` },
-                strategyCallback
-            )
-        );
+        if (type === 'oauth') {
+            passport.use(
+                new Strategy(
+                    { ...options, callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}` },
+                    strategyCallback
+                )
+            );
 
-        app.get(route, passport.authenticate(provider, { scope }));
+            app.get(route, passport.authenticate(provider, { scope }));
 
-        app.get(
-            callback,
-            passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
-            (req, res) => {
+            app.get(
+                callback,
+                passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
+                (req, res) => {
+                    const { user } = req;
+
+                    if (user.code && user.currentState) {
+                        res.cookie('commun_oauth_state', user.currentState);
+                        res.cookie('commun_oauth_identity', user.identity);
+                        res.cookie('commun_oauth_provider', user.provider);
+                    }
+
+                    if (user.code && user.code === 1101) {
+                        res.cookie('commun_oauth_state', 'registered');
+                    }
+
+                    if (user.success) {
+                        res.cookie('commun_oauth_identity', user.identity);
+                        res.cookie('commun_oauth_provider', user.provider);
+                    }
+
+                    return res.redirect('/');
+                }
+            );
+        }
+
+        if (type === 'token') {
+            passport.use(provider, new Strategy({ ...options }, strategyCallback));
+
+            app.get(route, passport.authenticate(provider, { scope }), (req, res) => {
                 const { user } = req;
 
                 if (user.code && user.currentState) {
-                    res.cookie('commun_oauth_state', user.currentState);
+                    res.json({
+                        oauthState: user.currentState,
+                        identity: user.identity,
+                        provider: user.provider,
+                    });
                 }
 
                 if (user.code && user.code === 1101) {
-                    res.cookie('commun_oauth_state', 'registered');
+                    res.json({ oauthState: 'registered' });
                 }
 
                 if (user.success) {
-                    res.cookie('commun_oauth_identity', user.identity);
-                    res.cookie('commun_oauth_provider', user.provider);
+                    res.json({ identity: user.identity, provider: user.provider });
                 }
-
-                return res.redirect('/');
-            }
-        );
+            });
+        }
 
         initializedProviders.push(provider);
         console.log(`${provider} is initialized`);

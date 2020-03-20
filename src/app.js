@@ -8,7 +8,7 @@ const oauth = require('./oauth');
 const { log, logRequest } = require('./utils/common');
 
 const morganConfig =
-    ':date[iso] :res[cf-ray] :method :url :status :res[content-length] - :response-time ms';
+    ':date[iso] :req[cf-ray] :method :url :status :res[content-length] - :response-time ms';
 
 const host = env.GLS_CONNECTOR_HOST;
 const port = env.GLS_CONNECTOR_PORT;

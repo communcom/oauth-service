@@ -1,13 +1,20 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
+const morgan = require('morgan');
 
 const env = require('./data/env');
 const oauth = require('./oauth');
+const { log, logRequest } = require('./utils/common');
+
+const morganConfig =
+    ':date[iso] :res[cf-ray] :method :url :status :res[content-length] - :response-time ms';
 
 const host = env.GLS_CONNECTOR_HOST;
 const port = env.GLS_CONNECTOR_PORT;
 const app = express();
+
+app.use(morgan(morganConfig));
 
 app.use(bodyParser.json());
 app.use(
@@ -18,11 +25,16 @@ app.use(
 
 oauth(app);
 
+app.use((err, req, res, next) => {
+    logRequest(req, err.stack);
+    res.status(500).json({ status: 'false' });
+});
+
 app.listen({ host, port }, err => {
     if (err) {
-        console.error(err);
+        log(err);
         process.exit(1);
     }
 
-    console.log('app running on port:', port);
+    log('app running on port:', port);
 });

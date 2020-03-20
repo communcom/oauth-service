@@ -2,6 +2,7 @@ const passport = require('passport');
 
 const env = require('../data/env');
 const { createIdentity } = require('../utils/identity');
+const { log, logError, logRequest } = require('../utils/common');
 
 const initializedProviders = [];
 
@@ -12,6 +13,7 @@ const oauthProviders = {
         options: {
             clientID: env.FACEBOOK_APP_ID,
             clientSecret: env.FACEBOOK_APP_SECRET,
+            passReqToCallback: true,
         },
         scope: undefined,
         type: 'oauth',
@@ -22,6 +24,7 @@ const oauthProviders = {
         options: {
             clientID: env.GOOGLE_CONSUMER_KEY,
             clientSecret: env.GOOGLE_CONSUMER_SECRET,
+            passReqToCallback: true,
         },
         scope: ['profile'],
         type: 'oauth',
@@ -33,6 +36,7 @@ const oauthProviders = {
         options: {
             clientID: env.GOOGLE_CONSUMER_KEY,
             clientSecret: env.GOOGLE_CONSUMER_SECRET,
+            passReqToCallback: true,
         },
         scope: ['profile'],
         type: 'token',
@@ -43,6 +47,7 @@ const oauthProviders = {
         options: {
             clientID: env.FACEBOOK_APP_ID,
             clientSecret: env.FACEBOOK_APP_SECRET,
+            passReqToCallback: true,
         },
         scope: ['profile'],
         type: 'token',
@@ -61,6 +66,7 @@ const oauthProviders = {
             teamId: env.APPLE_TEAM_ID,
             keyIdentifier: env.APPLE_KEY_IDENTIFIER,
             privateKeyPath: env.APLLE_PRIVATE_KEY,
+            passReqToCallback: true,
         },
     }, */
 };
@@ -68,7 +74,7 @@ const oauthProviders = {
 function validateEnv(envArray) {
     for (const envVar of envArray) {
         if (!env[envVar]) {
-            console.error(`ERROR - ${envVar} must be set`);
+            logError(`${envVar} must be set`);
             return false;
         }
     }
@@ -81,17 +87,21 @@ const buildRoutes = provider => ({
     callback: `${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
 });
 
-async function strategyCallback(accessToken, refreshToken, profile, done) {
+async function strategyCallback(req, accessToken, refreshToken, profile, done) {
     try {
         const rawResult = await createIdentity(profile);
 
         if (rawResult.error) {
+            logRequest(req, 'createIdentity result: ', rawResult.error);
+
             return done(null, rawResult.error);
         }
 
+        logRequest(req, 'createIdentity result: ', rawResult.result);
+
         return done(null, rawResult.result);
     } catch (err) {
-        console.error(err);
+        logRequest(req, 'createIdentity', err);
 
         return done(err);
     }
@@ -117,16 +127,16 @@ const oauth = app => {
         const currentProvider = oauthProviders[provider];
 
         if (!currentProvider) {
-            console.log(`ERROR - Unknown provider: ${provider}`);
+            logError(`Unknown provider: ${provider}`);
             continue;
         }
 
-        console.log(`Setting up provider: ${provider}`);
+        log(`Setting up provider: ${provider}`);
 
         const { Strategy, requiredEnv, options, scope, type } = currentProvider;
 
         if (!validateEnv(requiredEnv)) {
-            console.log(`ERROR - ${provider} is not initialized`);
+            logError(`${provider} is not initialized`);
             continue;
         }
 
@@ -193,7 +203,7 @@ const oauth = app => {
         }
 
         initializedProviders.push(provider);
-        console.log(`${provider} is initialized`);
+        log(`${provider} is initialized`);
     }
 
     if (!initializedProviders.length) {

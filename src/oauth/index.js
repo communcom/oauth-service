@@ -1,5 +1,8 @@
 const passport = require('passport');
 
+const fs = require('fs');
+const path = require('path');
+
 const env = require('../data/env');
 const { createIdentity } = require('../utils/identity');
 const { log, logError, logRequest } = require('../utils/common');
@@ -52,9 +55,8 @@ const oauthProviders = {
         scope: ['profile'],
         type: 'token',
     },
-    /* TODO
     apple: {
-        Strategy: require('passport-appleid'),
+        Strategy: require('passport-apple'),
         requiredEnv: [
             'APPLE_SERVICE_ID',
             'APPLE_TEAM_ID',
@@ -63,12 +65,35 @@ const oauthProviders = {
         ],
         options: {
             clientID: env.APPLE_SERVICE_ID,
-            teamId: env.APPLE_TEAM_ID,
-            keyIdentifier: env.APPLE_KEY_IDENTIFIER,
-            privateKeyPath: env.APLLE_PRIVATE_KEY,
+            teamID: env.APPLE_TEAM_ID,
+            keyID: env.APPLE_KEY_IDENTIFIER,
+            privateKeyLocation: fs.readFileSync(
+                path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`),
+                'utf-8'
+            ),
             passReqToCallback: true,
         },
-    }, */
+        scope: undefined,
+        type: 'oauth',
+    },
+    'apple-token': {
+        Strategy: require('passport-apple-token'),
+        requiredEnv: [
+            'APPLE_SERVICE_ID',
+            'APPLE_TEAM_ID',
+            'APPLE_KEY_IDENTIFIER',
+            'APLLE_PRIVATE_KEY',
+        ],
+        options: {
+            clientID: env.APPLE_SERVICE_ID,
+            teamID: env.APPLE_TEAM_ID,
+            keyID: env.APPLE_KEY_IDENTIFIER,
+            key: fs.readFileSync(path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`), 'utf-8'),
+            passReqToCallback: true,
+        },
+        scope: undefined,
+        type: 'token',
+    },
 };
 
 function validateEnv(envArray) {

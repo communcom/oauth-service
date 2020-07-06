@@ -1,4 +1,5 @@
 const passport = require('passport');
+const express = require('express');
 
 const fs = require('fs');
 const path = require('path');
@@ -132,6 +133,26 @@ async function strategyCallback(req, accessToken, refreshToken, profile, done) {
     }
 }
 
+function authenticateTokenCallback(req, res) {
+    const { user } = req;
+
+    if (user.code && user.currentState) {
+        res.json({
+            oauthState: user.currentState,
+            identity: user.identity,
+            provider: user.provider,
+        });
+    }
+
+    if (user.code && user.code === 1101) {
+        res.json({ oauthState: 'registered' });
+    }
+
+    if (user.success) {
+        res.json({ identity: user.identity, provider: user.provider });
+    }
+}
+
 passport.serializeUser((user, cb) => cb(null, user));
 passport.deserializeUser((obj, cb) => cb(null, obj));
 
@@ -204,27 +225,39 @@ const oauth = app => {
         }
 
         if (type === 'token') {
-            passport.use(provider, new Strategy({ ...options }, strategyCallback));
+            if (provider === 'apple-token') {
+                passport.use(
+                    provider,
+                    new Strategy(
+                        {
+                            ...options,
+                            callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}`,
+                        },
+                        strategyCallback
+                    )
+                );
 
-            app.get(route, passport.authenticate(provider, { scope }), (req, res) => {
-                const { user } = req;
+                app.get(
+                    route,
+                    passport.authenticate(provider, { scope }),
+                    authenticateTokenCallback
+                );
 
-                if (user.code && user.currentState) {
-                    res.json({
-                        oauthState: user.currentState,
-                        identity: user.identity,
-                        provider: user.provider,
-                    });
-                }
+                app.post(
+                    callback,
+                    express.urlencoded(),
+                    passport.authenticate(provider),
+                    authenticateTokenCallback
+                );
+            } else {
+                passport.use(provider, new Strategy({ ...options }, strategyCallback));
 
-                if (user.code && user.code === 1101) {
-                    res.json({ oauthState: 'registered' });
-                }
-
-                if (user.success) {
-                    res.json({ identity: user.identity, provider: user.provider });
-                }
-            });
+                app.get(
+                    route,
+                    passport.authenticate(provider, { scope }),
+                    authenticateTokenCallback
+                );
+            }
         }
 
         initializedProviders.push(provider);

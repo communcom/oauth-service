@@ -4,3 +4,4 @@ yarn.lock
 .env
 .npmrc
 docker-compose.yml
+*.p8

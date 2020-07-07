@@ -1,5 +1,6 @@
 const passport = require('passport');
 const express = require('express');
+const request = require('request');
 
 const fs = require('fs');
 const path = require('path');
@@ -115,6 +116,10 @@ const buildRoutes = provider => ({
 
 async function strategyCallback(req, accessToken, refreshToken, profile, done) {
     try {
+        if (!profile.provider) {
+            profile.provider = 'apple';
+        }
+
         const rawResult = await createIdentity(profile);
 
         if (rawResult.error) {
@@ -237,12 +242,6 @@ const oauth = app => {
                     )
                 );
 
-                app.get(
-                    route,
-                    passport.authenticate(provider, { scope }),
-                    authenticateTokenCallback
-                );
-
                 app.post(
                     callback,
                     express.urlencoded(),
@@ -267,6 +266,24 @@ const oauth = app => {
     if (!initializedProviders.length) {
         throw new Error('providers are not initialized');
     }
+
+    app.get('/oauth/apple-token', (req, res) => {
+        request.post(
+            {
+                url: `${env.CALLBACK_AUTH_ROUTE_PREFIX}/oauth/apple-token/callback`,
+                form: {
+                    code: req.query.access_token,
+                },
+            },
+            function (err) {
+                if (err) {
+                    res.status(401).json({ status: 'false' });
+                }
+
+                res.json({ status: 'ok' });
+            }
+        );
+    });
 
     app.get(env.SUCCESS_REDIRECT_URL, (req, res) => {
         res.json({ status: 'ok' });

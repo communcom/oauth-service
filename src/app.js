@@ -26,7 +26,7 @@ app.use(
 oauth(app);
 
 app.use((err, req, res, next) => {
-    logRequest(req, err.stack);
+    logRequest(req, err);
     res.status(500).json({ status: 'false' });
 });
 

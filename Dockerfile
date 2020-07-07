@@ -15,4 +15,5 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules/ ./node_modules/
 
 COPY ./src/ ./src
+COPY *p8 ./
 CMD [ "node", "./src/app.js" ]

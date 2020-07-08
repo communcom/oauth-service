@@ -59,12 +59,7 @@ const oauthProviders = {
     },
     apple: {
         Strategy: require('passport-apple-token'),
-        requiredEnv: [
-            'APPLE_CLIENT_ID_WEB',
-            'APPLE_TEAM_ID',
-            'APPLE_KEY_ID',
-            'APLLE_PRIVATE_KEY',
-        ],
+        requiredEnv: ['APPLE_CLIENT_ID_WEB', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APLLE_PRIVATE_KEY'],
         options: {
             clientID: env.APPLE_CLIENT_ID_WEB,
             teamID: env.APPLE_TEAM_ID,
@@ -77,12 +72,7 @@ const oauthProviders = {
     },
     'apple-token': {
         Strategy: require('passport-apple-token'),
-        requiredEnv: [
-            'APPLE_CLIENT_ID_APP',
-            'APPLE_TEAM_ID',
-            'APPLE_KEY_ID',
-            'APLLE_PRIVATE_KEY',
-        ],
+        requiredEnv: ['APPLE_CLIENT_ID_APP', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APLLE_PRIVATE_KEY'],
         options: {
             clientID: env.APPLE_CLIENT_ID_APP,
             teamID: env.APPLE_TEAM_ID,
@@ -133,6 +123,27 @@ async function strategyCallback(req, accessToken, refreshToken, profile, done) {
 
         return done(err);
     }
+}
+
+function authenticateCallback(req, res) {
+    const { user } = req;
+
+    if (user.code && user.currentState) {
+        res.cookie('commun_oauth_state', user.currentState);
+        res.cookie('commun_oauth_identity', user.identity);
+        res.cookie('commun_oauth_provider', user.provider);
+    }
+
+    if (user.code && user.code === 1101) {
+        res.cookie('commun_oauth_state', 'registered');
+    }
+
+    if (user.success) {
+        res.cookie('commun_oauth_identity', user.identity);
+        res.cookie('commun_oauth_provider', user.provider);
+    }
+
+    return res.redirect('/');
 }
 
 function authenticateTokenCallback(req, res) {
@@ -199,31 +210,20 @@ const oauth = app => {
             );
 
             app.get(route, passport.authenticate(provider, { scope }));
-
-            app.get(
-                callback,
-                passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
-                (req, res) => {
-                    const { user } = req;
-
-                    if (user.code && user.currentState) {
-                        res.cookie('commun_oauth_state', user.currentState);
-                        res.cookie('commun_oauth_identity', user.identity);
-                        res.cookie('commun_oauth_provider', user.provider);
-                    }
-
-                    if (user.code && user.code === 1101) {
-                        res.cookie('commun_oauth_state', 'registered');
-                    }
-
-                    if (user.success) {
-                        res.cookie('commun_oauth_identity', user.identity);
-                        res.cookie('commun_oauth_provider', user.provider);
-                    }
-
-                    return res.redirect('/');
-                }
-            );
+            if (provider === 'apple') {
+                app.post(
+                    callback,
+                    express.urlencoded(),
+                    passport.authenticate(provider),
+                    authenticateCallback
+                );
+            } else {
+                app.get(
+                    callback,
+                    passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
+                    authenticateCallback
+                );
+            }
         }
 
         if (type === 'token') {

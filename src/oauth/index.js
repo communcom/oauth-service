@@ -62,7 +62,7 @@ const oauthProviders = {
         requiredEnv: [
             'APPLE_CLIENT_ID_WEB',
             'APPLE_TEAM_ID',
-            'APPLE_KEY_IDENTIFIER',
+            'APPLE_KEY_ID',
             'APLLE_PRIVATE_KEY',
         ],
         options: {
@@ -80,7 +80,7 @@ const oauthProviders = {
         requiredEnv: [
             'APPLE_CLIENT_ID_APP',
             'APPLE_TEAM_ID',
-            'APPLE_KEY_IDENTIFIER',
+            'APPLE_KEY_ID',
             'APLLE_PRIVATE_KEY',
         ],
         options: {

@@ -58,21 +58,18 @@ const oauthProviders = {
         type: 'token',
     },
     apple: {
-        Strategy: require('passport-apple'),
+        Strategy: require('passport-apple-token'),
         requiredEnv: [
-            'APPLE_SERVICE_ID',
+            'APPLE_CLIENT_ID_WEB',
             'APPLE_TEAM_ID',
             'APPLE_KEY_IDENTIFIER',
             'APLLE_PRIVATE_KEY',
         ],
         options: {
-            clientID: env.APPLE_SERVICE_ID,
+            clientID: env.APPLE_CLIENT_ID_WEB,
             teamID: env.APPLE_TEAM_ID,
-            keyID: env.APPLE_KEY_IDENTIFIER,
-            privateKeyLocation: fs.readFileSync(
-                path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`),
-                'utf-8'
-            ),
+            keyID: env.APPLE_KEY_ID,
+            key: fs.readFileSync(path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`), 'utf-8'),
             passReqToCallback: true,
         },
         scope: undefined,
@@ -81,15 +78,15 @@ const oauthProviders = {
     'apple-token': {
         Strategy: require('passport-apple-token'),
         requiredEnv: [
-            'APPLE_SERVICE_ID',
+            'APPLE_CLIENT_ID_APP',
             'APPLE_TEAM_ID',
             'APPLE_KEY_IDENTIFIER',
             'APLLE_PRIVATE_KEY',
         ],
         options: {
-            clientID: env.APPLE_SERVICE_ID,
+            clientID: env.APPLE_CLIENT_ID_APP,
             teamID: env.APPLE_TEAM_ID,
-            keyID: env.APPLE_KEY_IDENTIFIER,
+            keyID: env.APPLE_KEY_ID,
             key: fs.readFileSync(path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`), 'utf-8'),
             passReqToCallback: true,
         },
@@ -275,12 +272,13 @@ const oauth = app => {
                     code: req.query.access_token,
                 },
             },
-            function (err) {
+            (err, response, body) => {
                 if (err) {
                     res.status(401).json({ status: 'false' });
                 }
 
-                res.json({ status: 'ok' });
+                res.set('Content-Type', 'application/json');
+                res.send(body);
             }
         );
     });

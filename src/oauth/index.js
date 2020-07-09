@@ -1,7 +1,13 @@
 const passport = require('passport');
+const express = require('express');
+const request = require('request');
+
+const fs = require('fs');
+const path = require('path');
 
 const env = require('../data/env');
 const { createIdentity } = require('../utils/identity');
+const { log, logError, logRequest } = require('../utils/common');
 
 const initializedProviders = [];
 
@@ -12,8 +18,10 @@ const oauthProviders = {
         options: {
             clientID: env.FACEBOOK_APP_ID,
             clientSecret: env.FACEBOOK_APP_SECRET,
+            passReqToCallback: true,
         },
         scope: undefined,
+        type: 'oauth',
     },
     google: {
         Strategy: require('passport-google-oauth').OAuth2Strategy,
@@ -21,31 +29,66 @@ const oauthProviders = {
         options: {
             clientID: env.GOOGLE_CONSUMER_KEY,
             clientSecret: env.GOOGLE_CONSUMER_SECRET,
+            passReqToCallback: true,
         },
         scope: ['profile'],
+        type: 'oauth',
     },
-    /* TODO
-    apple: {
-        Strategy: require('passport-appleid'),
-        requiredEnv: [
-            'APPLE_SERVICE_ID',
-            'APPLE_TEAM_ID',
-            'APPLE_KEY_IDENTIFIER',
-            'APLLE_PRIVATE_KEY',
-        ],
+    'google-token': {
+        Strategy: require('passport-token-google2').Strategy,
+        strategyName: 'google-token',
+        requiredEnv: ['GOOGLE_CONSUMER_KEY', 'GOOGLE_CONSUMER_SECRET'],
         options: {
-            clientID: env.APPLE_SERVICE_ID,
-            teamId: env.APPLE_TEAM_ID,
-            keyIdentifier: env.APPLE_KEY_IDENTIFIER,
-            privateKeyPath: env.APLLE_PRIVATE_KEY,
+            clientID: env.GOOGLE_CONSUMER_KEY,
+            clientSecret: env.GOOGLE_CONSUMER_SECRET,
+            passReqToCallback: true,
         },
-    }, */
+        scope: ['profile'],
+        type: 'token',
+    },
+    'facebook-token': {
+        Strategy: require('passport-facebook-token'),
+        requiredEnv: ['FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET'],
+        options: {
+            clientID: env.FACEBOOK_APP_ID,
+            clientSecret: env.FACEBOOK_APP_SECRET,
+            passReqToCallback: true,
+        },
+        scope: ['profile'],
+        type: 'token',
+    },
+    apple: {
+        Strategy: require('passport-apple-token'),
+        requiredEnv: ['APPLE_CLIENT_ID_WEB', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APLLE_PRIVATE_KEY'],
+        options: {
+            clientID: env.APPLE_CLIENT_ID_WEB,
+            teamID: env.APPLE_TEAM_ID,
+            keyID: env.APPLE_KEY_ID,
+            key: fs.readFileSync(path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`), 'utf-8'),
+            passReqToCallback: true,
+        },
+        scope: undefined,
+        type: 'oauth',
+    },
+    'apple-token': {
+        Strategy: require('passport-apple-token'),
+        requiredEnv: ['APPLE_CLIENT_ID_APP', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APLLE_PRIVATE_KEY'],
+        options: {
+            clientID: env.APPLE_CLIENT_ID_APP,
+            teamID: env.APPLE_TEAM_ID,
+            keyID: env.APPLE_KEY_ID,
+            key: fs.readFileSync(path.join(__dirname, `../../${env.APLLE_PRIVATE_KEY}`), 'utf-8'),
+            passReqToCallback: true,
+        },
+        scope: undefined,
+        type: 'token',
+    },
 };
 
 function validateEnv(envArray) {
     for (const envVar of envArray) {
         if (!env[envVar]) {
-            console.error(`ERROR - ${envVar} must be set`);
+            logError(`${envVar} must be set`);
             return false;
         }
     }
@@ -58,19 +101,68 @@ const buildRoutes = provider => ({
     callback: `${env.AUTH_ROUTE_PREFIX}/${provider}/callback`,
 });
 
-async function strategyCallback(accessToken, refreshToken, profile, done) {
+async function strategyCallback(req, accessToken, refreshToken, profile, done) {
     try {
+        if (!profile.provider) {
+            profile.provider = 'apple';
+        }
+
         const rawResult = await createIdentity(profile);
 
         if (rawResult.error) {
+            logRequest(req, 'createIdentity result: ', rawResult.error);
+
             return done(null, rawResult.error);
         }
 
+        logRequest(req, 'createIdentity result: ', rawResult.result);
+
         return done(null, rawResult.result);
     } catch (err) {
-        console.error(err);
+        logRequest(req, 'createIdentity', err);
 
         return done(err);
+    }
+}
+
+function authenticateCallback(req, res) {
+    const { user } = req;
+
+    if (user.code && user.currentState) {
+        res.cookie('commun_oauth_state', user.currentState);
+        res.cookie('commun_oauth_identity', user.identity);
+        res.cookie('commun_oauth_provider', user.provider);
+    }
+
+    if (user.code && user.code === 1101) {
+        res.cookie('commun_oauth_state', 'registered');
+    }
+
+    if (user.success) {
+        res.cookie('commun_oauth_identity', user.identity);
+        res.cookie('commun_oauth_provider', user.provider);
+    }
+
+    return res.redirect('/');
+}
+
+function authenticateTokenCallback(req, res) {
+    const { user } = req;
+
+    if (user.code && user.currentState) {
+        res.json({
+            oauthState: user.currentState,
+            identity: user.identity,
+            provider: user.provider,
+        });
+    }
+
+    if (user.code && user.code === 1101) {
+        res.json({ oauthState: 'registered' });
+    }
+
+    if (user.success) {
+        res.json({ identity: user.identity, provider: user.provider });
     }
 }
 
@@ -94,60 +186,102 @@ const oauth = app => {
         const currentProvider = oauthProviders[provider];
 
         if (!currentProvider) {
-            console.log(`ERROR - Unknown provider: ${provider}`);
+            logError(`Unknown provider: ${provider}`);
             continue;
         }
 
-        console.log(`Setting up provider: ${provider}`);
+        log(`Setting up provider: ${provider}`);
 
-        const { Strategy, requiredEnv, options, scope } = currentProvider;
+        const { Strategy, requiredEnv, options, scope, type } = currentProvider;
 
         if (!validateEnv(requiredEnv)) {
-            console.log(`ERROR - ${provider} is not initialized`);
+            logError(`${provider} is not initialized`);
             continue;
         }
 
         const { route, callback } = buildRoutes(provider);
 
-        passport.use(
-            new Strategy(
-                { ...options, callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}` },
-                strategyCallback
-            )
-        );
+        if (type === 'oauth') {
+            passport.use(
+                new Strategy(
+                    { ...options, callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}` },
+                    strategyCallback
+                )
+            );
 
-        app.get(route, passport.authenticate(provider, { scope }));
-
-        app.get(
-            callback,
-            passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
-            (req, res) => {
-                const { user } = req;
-
-                if (user.code && user.currentState) {
-                    res.cookie('commun_oauth_state', user.currentState);
-                }
-
-                if (user.code && user.code === 1101) {
-                    res.cookie('commun_oauth_state', 'registered');
-                }
-
-                if (user.success) {
-                    res.cookie('commun_oauth_identity', user.identity);
-                    res.cookie('commun_oauth_provider', user.provider);
-                }
-
-                return res.redirect('/');
+            app.get(route, passport.authenticate(provider, { scope }));
+            if (provider === 'apple') {
+                app.post(
+                    callback,
+                    express.urlencoded(),
+                    passport.authenticate(provider),
+                    authenticateCallback
+                );
+            } else {
+                app.get(
+                    callback,
+                    passport.authenticate(provider, { failureRedirect: env.FAILURE_REDIRECT_URL }),
+                    authenticateCallback
+                );
             }
-        );
+        }
+
+        if (type === 'token') {
+            if (provider === 'apple-token') {
+                passport.use(
+                    provider,
+                    new Strategy(
+                        {
+                            ...options,
+                            callbackURL: `${env.CALLBACK_AUTH_ROUTE_PREFIX}${callback}`,
+                        },
+                        strategyCallback
+                    )
+                );
+
+                app.post(
+                    callback,
+                    express.urlencoded(),
+                    passport.authenticate(provider),
+                    authenticateTokenCallback
+                );
+            } else {
+                passport.use(provider, new Strategy({ ...options }, strategyCallback));
+
+                app.get(
+                    route,
+                    passport.authenticate(provider, { scope }),
+                    authenticateTokenCallback
+                );
+            }
+        }
 
         initializedProviders.push(provider);
-        console.log(`${provider} is initialized`);
+        log(`${provider} is initialized`);
     }
 
     if (!initializedProviders.length) {
         throw new Error('providers are not initialized');
     }
+
+    app.get('/oauth/apple-token', (req, res) => {
+        request.post(
+            {
+                url: `${env.CALLBACK_AUTH_ROUTE_PREFIX}/oauth/apple-token/callback`,
+                form: {
+                    code: req.query.access_token,
+                },
+            },
+            (err, response, body) => {
+                if (err) {
+                    res.status(401).json({ status: 'false' });
+                }
+
+                res.set('Content-Type', 'application/json');
+                res.send(body);
+            }
+        );
+    });
 
     app.get(env.SUCCESS_REDIRECT_URL, (req, res) => {
         res.json({ status: 'ok' });

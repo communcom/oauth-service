@@ -34,6 +34,16 @@ const oauthProviders = {
         scope: ['profile'],
         type: 'oauth',
     },
+    telegram: {
+        Strategy: require('passport-telegram-official').TelegramStrategy,
+        requiredEnv: ['TELEGRAM_BOT_TOKEN'],
+        options: {
+            botToken: env.TELEGRAM_BOT_TOKEN,
+            passReqToCallback: true,
+        },
+        scope: undefined,
+        type: 'oauth',
+    },
     'google-token': {
         Strategy: require('passport-token-google2').Strategy,
         strategyName: 'google-token',

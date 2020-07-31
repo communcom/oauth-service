@@ -113,6 +113,11 @@ const buildRoutes = provider => ({
 
 async function strategyCallback(req, accessToken, refreshToken, profile, done) {
     try {
+        if (req.route.path === '/oauth/telegram') {
+            [profile, done] = [accessToken, refreshToken];
+            profile.provider = 'telegram';
+        }
+
         if (!profile.provider) {
             profile.provider = 'apple';
         }
@@ -219,7 +224,12 @@ const oauth = app => {
                 )
             );
 
-            app.get(route, passport.authenticate(provider, { scope }));
+            if (provider === 'telegram') {
+                app.get(route, passport.authenticate(provider), authenticateCallback);
+            } else {
+                app.get(route, passport.authenticate(provider, { scope }));
+            }
+
             if (provider === 'apple') {
                 app.post(
                     callback,
